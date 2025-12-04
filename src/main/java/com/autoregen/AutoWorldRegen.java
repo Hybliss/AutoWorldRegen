@@ -26,11 +26,9 @@ public class AutoWorldRegen extends JavaPlugin {
     public void onEnable() {
         logger = getLogger();
         
-        // Sauvegarde la config par défaut
         saveDefaultConfig();
         config = getConfig();
         
-        // Charge la configuration
         loadConfiguration();
         
         logger.info("========================================");
@@ -44,7 +42,6 @@ public class AutoWorldRegen extends JavaPlugin {
         logger.info("  Protected Worlds: " + protectedWorlds);
         logger.info("========================================");
         
-        // Démarre le cycle de régénération
         startRegenerationCycle();
     }
     
@@ -54,7 +51,6 @@ public class AutoWorldRegen extends JavaPlugin {
         bufferRadius = config.getInt("buffer-radius", 10);
         protectedWorlds = config.getStringList("protected-worlds");
         
-        // Convertit en ticks (20 ticks = 1 seconde, 1200 ticks = 1 minute)
         regenIntervalTicks = intervalMinutes * 60L * 20L;
         warningTicks = warningMinutes * 60L * 20L;
     }
@@ -63,10 +59,8 @@ public class AutoWorldRegen extends JavaPlugin {
         new BukkitRunnable() {
             @Override
             public void run() {
-                // Envoie l'avertissement
                 sendWarning();
                 
-                // Planifie la régénération après le délai d'avertissement
                 new BukkitRunnable() {
                     @Override
                     public void run() {
@@ -87,9 +81,7 @@ public class AutoWorldRegen extends JavaPlugin {
     }
     
     private void regenerateWorld() {
-        // Régénère tous les mondes non protégés
         for (World world : Bukkit.getWorlds()) {
-            // Ignore les mondes protégés
             if (protectedWorlds.contains(world.getName())) {
                 logger.info("Skipping protected world: " + world.getName());
                 continue;
@@ -104,23 +96,20 @@ public class AutoWorldRegen extends JavaPlugin {
         logger.info("Starting regeneration for world: " + world.getName());
         logger.info("========================================");
         
-        // Collecte les chunks protégés
         Set<String> protectedChunks = getProtectedChunks(world);
         
-        // Collecte TOUS les chunks chargés
         Chunk[] loadedChunks = world.getLoadedChunks();
         logger.info("Total loaded chunks: " + loadedChunks.length);
         logger.info("Protected chunks: " + protectedChunks.size());
         
         int regenerated = 0;
-        int protected = 0;
+        int protectedCount = 0;
         
-        // Régénère chunk par chunk
         for (Chunk chunk : loadedChunks) {
             String chunkKey = chunk.getX() + "," + chunk.getZ();
             
             if (protectedChunks.contains(chunkKey)) {
-                protected++;
+                protectedCount++;
                 continue;
             }
             
@@ -128,12 +117,10 @@ public class AutoWorldRegen extends JavaPlugin {
                 int x = chunk.getX();
                 int z = chunk.getZ();
                 
-                // Régénère le chunk (Paper 1.21+ compatible)
                 world.regenerateChunk(x, z);
                 
                 regenerated++;
                 
-                // Log toutes les 10 régénérations pour éviter le spam
                 if (regenerated % 10 == 0) {
                     logger.info("Progress: " + regenerated + " chunks regenerated...");
                 }
@@ -146,10 +133,9 @@ public class AutoWorldRegen extends JavaPlugin {
         logger.info("========================================");
         logger.info("Regeneration Complete!");
         logger.info("  Regenerated: " + regenerated + " chunks");
-        logger.info("  Protected: " + protected + " chunks");
+        logger.info("  Protected: " + protectedCount + " chunks");
         logger.info("========================================");
         
-        // Message aux joueurs
         String completeMessage = config.getString("complete-message", "&a✅ World regeneration complete!");
         Bukkit.broadcastMessage(ChatColor.translateAlternateColorCodes('&', completeMessage));
     }
@@ -157,13 +143,11 @@ public class AutoWorldRegen extends JavaPlugin {
     private Set<String> getProtectedChunks(World world) {
         Set<String> protectedChunks = new HashSet<>();
         
-        // 1. Protection des chunks avec joueurs + buffer
         for (Player player : world.getPlayers()) {
             Chunk playerChunk = player.getLocation().getChunk();
             int centerX = playerChunk.getX();
             int centerZ = playerChunk.getZ();
             
-            // Protège le chunk du joueur + buffer
             for (int dx = -bufferRadius; dx <= bufferRadius; dx++) {
                 for (int dz = -bufferRadius; dz <= bufferRadius; dz++) {
                     String chunkKey = (centerX + dx) + "," + (centerZ + dz);
@@ -172,7 +156,6 @@ public class AutoWorldRegen extends JavaPlugin {
             }
         }
         
-        // 2. Protection des chunks avec claims GriefPrevention
         if (Bukkit.getPluginManager().getPlugin("GriefPrevention") != null) {
             GriefPrevention gp = GriefPrevention.instance;
             
