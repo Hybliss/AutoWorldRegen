@@ -1,23 +1,23 @@
 # AutoWorldRegen Configuration
 # Compatible avec Paper 1.21.10
 
-# Intervalle entre chaque régénération (en minutes)
-regen-interval-minutes: 120
+# Intervalle de scan (en minutes)
+regen-interval-minutes: 30
 
-# Temps d'avertissement avant régénération (en minutes)
-warning-minutes: 10
+# Avertissement avant régénération
+warning-minutes: 5
 
 # Rayon de protection autour des joueurs (en chunks)
-# 1 chunk = 16 blocs, donc 10 chunks = 160 blocs
-buffer-radius: 10
+buffer-radius: 5
 
-# Mondes à NE PAS régénérer (liste)
+# Nom du monde à régénérer
+world-name: world
+
+# Mondes jamais régénérés
 protected-worlds:
   - world_nether
   - world_the_end
 
-# Message d'avertissement ({minutes} sera remplacé)
-warning-message: "&e⚠ Le monde va se régénérer dans {minutes} minutes ! Retournez à vos claims !"
-
-# Message de complétion
-complete-message: "&a✅ Régénération terminée ! Le monde est de nouveau neuf !"
+# Messages
+warning-message: "&e⚠️ ATTENTION : Régénération dans {minutes} minute(s) !"
+complete-message: "&a✅ Regeneration terminée !"
