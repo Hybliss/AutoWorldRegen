@@ -143,6 +143,7 @@ public class AutoWorldRegen extends JavaPlugin {
     private Set<String> getProtectedChunks(World world) {
         Set<String> protectedChunks = new HashSet<>();
         
+        // Protection des chunks autour des joueurs
         for (Player player : world.getPlayers()) {
             Chunk playerChunk = player.getLocation().getChunk();
             int centerX = playerChunk.getX();
@@ -156,28 +157,41 @@ public class AutoWorldRegen extends JavaPlugin {
             }
         }
         
+        // Protection des claims GriefPrevention
         if (Bukkit.getPluginManager().getPlugin("GriefPrevention") != null) {
-            GriefPrevention gp = GriefPrevention.instance;
-            
-            for (Claim claim : gp.dataStore.getClaims()) {
-                if (!claim.parent.getWorld().equals(world)) {
-                    continue;
-                }
+            try {
+                GriefPrevention gp = GriefPrevention.instance;
                 
-                Location lesserCorner = claim.getLesserBoundaryCorner();
-                Location greaterCorner = claim.getGreaterBoundaryCorner();
-                
-                int minChunkX = lesserCorner.getBlockX() >> 4;
-                int minChunkZ = lesserCorner.getBlockZ() >> 4;
-                int maxChunkX = greaterCorner.getBlockX() >> 4;
-                int maxChunkZ = greaterCorner.getBlockZ() >> 4;
-                
-                for (int x = minChunkX; x <= maxChunkX; x++) {
-                    for (int z = minChunkZ; z <= maxChunkZ; z++) {
-                        protectedChunks.add(x + "," + z);
+                for (Claim claim : gp.dataStore.getClaims()) {
+                    // Vérifie que le claim est dans le bon monde
+                    Location lesserCorner = claim.getLesserBoundaryCorner();
+                    if (!lesserCorner.getWorld().equals(world)) {
+                        continue;
+                    }
+                    
+                    Location greaterCorner = claim.getGreaterBoundaryCorner();
+                    
+                    // Convertit les coordonnées de blocs en coordonnées de chunks
+                    int minChunkX = lesserCorner.getBlockX() >> 4;
+                    int minChunkZ = lesserCorner.getBlockZ() >> 4;
+                    int maxChunkX = greaterCorner.getBlockX() >> 4;
+                    int maxChunkZ = greaterCorner.getBlockZ() >> 4;
+                    
+                    // Ajoute tous les chunks du claim
+                    for (int x = minChunkX; x <= maxChunkX; x++) {
+                        for (int z = minChunkZ; z <= maxChunkZ; z++) {
+                            protectedChunks.add(x + "," + z);
+                        }
                     }
                 }
+                
+                logger.info("GriefPrevention protection enabled");
+                
+            } catch (Exception e) {
+                logger.warning("Error loading GriefPrevention claims: " + e.getMessage());
             }
+        } else {
+            logger.info("GriefPrevention not found - only protecting player chunks");
         }
         
         return protectedChunks;
