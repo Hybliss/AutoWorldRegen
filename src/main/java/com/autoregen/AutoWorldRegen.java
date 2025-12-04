@@ -1,201 +1,203 @@
 package com.autoregen;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Chunk;
-import org.bukkit.Location;
 import org.bukkit.World;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandSender;
+import org.bukkit.Chunk;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
-import me.ryanhamshire.GriefPrevention.GriefPrevention;
-import me.ryanhamshire.GriefPrevention.Claim;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
 
-import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.logging.Logger;
 
 public class AutoWorldRegen extends JavaPlugin {
-    
-    private GriefPrevention gp;
-    private long taskId = -1;
-    
+
+    private Logger logger;
+    private FileConfiguration config;
+    private long regenIntervalTicks;
+    private int warningMinutes;
+    private int bufferRadius;
+    private Set<String> protectedWorlds;
+    private BukkitRunnable regenTask;
+
     @Override
     public void onEnable() {
-        // Sauvegarde config par défaut
+        logger = getLogger();
+        
+        // Sauvegarder la config par défaut
         saveDefaultConfig();
+        loadConfiguration();
         
-        // Récupère GriefPrevention
-        gp = GriefPrevention.instance;
-        if (gp == null) {
-            getLogger().severe("GriefPrevention non trouvé ! Plugin désactivé.");
-            getServer().getPluginManager().disablePlugin(this);
-            return;
-        }
+        // Démarrer la tâche de régénération
+        startRegenTask();
         
-        // Démarre la régénération automatique
-        startAutoRegen();
-        
-        getLogger().info("§a[AutoWorldRegen] Activé ! Intervalle: " + 
-            getConfig().getInt("interval-days") + " jours");
+        logger.info("AutoWorldRegen activé ! Intervalle: " + (regenIntervalTicks / 20 / 60) + " minutes");
     }
-    
+
     @Override
     public void onDisable() {
-        if (taskId != -1) {
-            Bukkit.getScheduler().cancelTask((int) taskId);
+        if (regenTask != null) {
+            regenTask.cancel();
         }
-        getLogger().info("§c[AutoWorldRegen] Désactivé !");
+        logger.info("AutoWorldRegen désactivé !");
     }
-    
-    private void startAutoRegen() {
-        int intervalDays = getConfig().getInt("interval-days", 7);
-        long intervalTicks = 20L * 60 * 60 * 24 * intervalDays;
+
+    private void loadConfiguration() {
+        config = getConfig();
         
-        taskId = new BukkitRunnable() {
+        // Charger les paramètres
+        int regenIntervalMinutes = config.getInt("regen-interval-minutes", 60);
+        regenIntervalTicks = regenIntervalMinutes * 60L * 20L; // Convertir en ticks
+        
+        warningMinutes = config.getInt("warning-minutes", 5);
+        bufferRadius = config.getInt("buffer-radius", 10);
+        
+        protectedWorlds = new HashSet<>(config.getStringList("protected-worlds"));
+    }
+
+    private void startRegenTask() {
+        regenTask = new BukkitRunnable() {
             @Override
             public void run() {
-                scheduleRegeneration();
+                // Avertissement X minutes avant
+                scheduleWarning();
+                
+                // Régénération après le délai
+                Bukkit.getScheduler().runTaskLater(AutoWorldRegen.this, () -> {
+                    regenerateChunks();
+                }, warningMinutes * 60L * 20L);
             }
-        }.runTaskTimer(this, intervalTicks, intervalTicks).getTaskId();
+        };
+        
+        regenTask.runTaskTimer(this, regenIntervalTicks, regenIntervalTicks);
     }
-    
-    private void scheduleRegeneration() {
-        List<Integer> warnings = getConfig().getIntegerList("warnings");
+
+    private void scheduleWarning() {
+        String message = config.getString("warning-message", 
+            "&c[AutoRegen] Régénération des chunks dans " + warningMinutes + " minutes !");
         
-        // Avertissements progressifs
-        for (int i = 0; i < warnings.size(); i++) {
-            int minutes = warnings.get(i);
-            long delay = 20L * 60 * (warnings.get(0) - minutes);
-            
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    String color = minutes <= 5 ? "§c" : "§6";
-                    Bukkit.broadcastMessage(color + "[Île] Régénération dans " + 
-                        minutes + " minute" + (minutes > 1 ? "s" : "") + " !");
-                }
-            }.runTaskLater(this, delay);
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            player.sendMessage(message.replace("&", "§"));
         }
         
-        // Régénération finale
-        long finalDelay = 20L * 60 * warnings.get(0);
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                executeRegeneration();
-            }
-        }.runTaskLater(this, finalDelay);
+        logger.info("Avertissement envoyé : régénération dans " + warningMinutes + " minutes");
     }
-    
-    private void executeRegeneration() {
-        Bukkit.broadcastMessage("§4[Île] RÉGÉNÉRATION EN COURS...");
+
+    private void regenerateChunks() {
+        int chunksRegenerated = 0;
         
-        String worldName = getConfig().getString("world", "world");
-        World world = Bukkit.getWorld(worldName);
-        
-        if (world == null) {
-            getLogger().warning("Monde '" + worldName + "' non trouvé !");
-            return;
-        }
-        
-        int bufferChunks = getConfig().getInt("buffer-chunks", 2);
-        int regenerated = 0;
-        int protected = 0;
-        
-        // Téléporte les joueurs au spawn
-        Location spawn = world.getSpawnLocation();
-        for (Player player : world.getPlayers()) {
-            player.teleport(spawn);
-            player.sendMessage("§e[Île] Téléporté au spawn pour la régénération !");
-        }
-        
-        // Régénère les chunks
-        Chunk[] chunks = world.getLoadedChunks();
-        for (Chunk chunk : chunks) {
-            if (isProtected(chunk, bufferChunks)) {
-                protected++;
+        for (World world : Bukkit.getWorlds()) {
+            // Ignorer les mondes protégés
+            if (protectedWorlds.contains(world.getName())) {
                 continue;
             }
             
-            world.regenerateChunk(chunk.getX(), chunk.getZ());
-            regenerated++;
+            Chunk[] loadedChunks = world.getLoadedChunks();
+            
+            for (Chunk chunk : loadedChunks) {
+                // Ne pas régénérer si un joueur est proche
+                if (isPlayerNearby(chunk, bufferRadius)) {
+                    continue;
+                }
+                
+                // Vérifier si le chunk est dans une claim GriefPrevention (optionnel)
+                // if (isInClaim(chunk)) continue;
+                
+                // Régénérer le chunk
+                world.regenerateChunk(chunk.getX(), chunk.getZ());
+                chunksRegenerated++;
+            }
         }
         
-        String message = "§a[Île] Régénération terminée ! " +
-            "§7(Régénérés: §e" + regenerated + "§7, Protégés: §e" + protected + "§7)";
-        Bukkit.broadcastMessage(message);
-        getLogger().info(message);
+        logger.info("Régénération terminée : " + chunksRegenerated + " chunks régénérés");
+        
+        // Message aux joueurs
+        String completeMessage = config.getString("complete-message", 
+            "&a[AutoRegen] Régénération terminée !");
+        
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            player.sendMessage(completeMessage.replace("&", "§"));
+        }
     }
-    
-    private boolean isProtected(Chunk chunk, int buffer) {
-        World world = chunk.getWorld();
+
+    private boolean isPlayerNearby(Chunk chunk, int radius) {
         int chunkX = chunk.getX();
         int chunkZ = chunk.getZ();
+        World world = chunk.getWorld();
         
-        // Vérifie le chunk et ses voisins
-        for (int x = -buffer; x <= buffer; x++) {
-            for (int z = -buffer; z <= buffer; z++) {
-                Location checkLoc = new Location(
-                    world,
-                    (chunkX + x) * 16 + 8,
-                    64,
-                    (chunkZ + z) * 16 + 8
-                );
-                
-                Claim claim = gp.dataStore.getClaimAt(checkLoc, false, null);
-                if (claim != null) {
-                    return true; // Chunk protégé
-                }
+        for (Player player : world.getPlayers()) {
+            Chunk playerChunk = player.getLocation().getChunk();
+            int playerChunkX = playerChunk.getX();
+            int playerChunkZ = playerChunk.getZ();
+            
+            // Calculer la distance en chunks
+            int distanceX = Math.abs(chunkX - playerChunkX);
+            int distanceZ = Math.abs(chunkZ - playerChunkZ);
+            
+            if (distanceX <= radius && distanceZ <= radius) {
+                return true; // Un joueur est trop proche
             }
         }
         
         return false;
     }
-    
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (command.getName().equalsIgnoreCase("autoregen")) {
-            
-            if (!sender.hasPermission("autoregen.admin")) {
-                sender.sendMessage("§cPermission refusée !");
-                return true;
-            }
-            
-            if (args.length == 0) {
-                sender.sendMessage("§6=== AutoWorldRegen ===");
-                sender.sendMessage("§e/autoregen reload §7- Recharge la config");
-                sender.sendMessage("§e/autoregen now §7- Force la régénération");
-                sender.sendMessage("§e/autoregen info §7- Affiche les infos");
-                return true;
-            }
-            
-            switch (args[0].toLowerCase()) {
-                case "reload":
-                    reloadConfig();
-                    Bukkit.getScheduler().cancelTask((int) taskId);
-                    startAutoRegen();
-                    sender.sendMessage("§a[AutoWorldRegen] Configuration rechargée !");
-                    break;
-                    
-                case "now":
-                    sender.sendMessage("§e[AutoWorldRegen] Régénération forcée lancée !");
-                    scheduleRegeneration();
-                    break;
-                    
-                case "info":
-                    sender.sendMessage("§6=== Informations ===");
-                    sender.sendMessage("§7Intervalle: §e" + getConfig().getInt("interval-days") + " jours");
-                    sender.sendMessage("§7Buffer: §e" + getConfig().getInt("buffer-chunks") + " chunks");
-                    sender.sendMessage("§7Monde: §e" + getConfig().getString("world"));
-                    break;
-                    
-                default:
-                    sender.sendMessage("§cCommande inconnue ! Utilise /autoregen");
-            }
-            
+        if (!command.getName().equalsIgnoreCase("autoregen")) {
+            return false;
+        }
+        
+        if (!sender.hasPermission("autoregen.use")) {
+            sender.sendMessage("§cVous n'avez pas la permission d'utiliser cette commande !");
             return true;
         }
         
-        return false;
+        if (args.length == 0) {
+            sender.sendMessage("§e=== AutoWorldRegen ===");
+            sender.sendMessage("§7/autoregen info §f- Afficher les informations");
+            sender.sendMessage("§7/autoregen now §f- Forcer la régénération");
+            sender.sendMessage("§7/autoregen reload §f- Recharger la config");
+            return true;
+        }
+        
+        switch (args[0].toLowerCase()) {
+            case "info":
+                sender.sendMessage("§e=== Informations ===");
+                sender.sendMessage("§7Intervalle: §f" + (regenIntervalTicks / 20 / 60) + " minutes");
+                sender.sendMessage("§7Avertissement: §f" + warningMinutes + " minutes avant");
+                sender.sendMessage("§7Buffer: §f" + bufferRadius + " chunks");
+                sender.sendMessage("§7Mondes protégés: §f" + protectedWorlds);
+                break;
+                
+            case "now":
+                if (!sender.hasPermission("autoregen.admin")) {
+                    sender.sendMessage("§cPermission requise: autoregen.admin");
+                    return true;
+                }
+                sender.sendMessage("§aRégénération forcée en cours...");
+                regenerateChunks();
+                break;
+                
+            case "reload":
+                if (!sender.hasPermission("autoregen.admin")) {
+                    sender.sendMessage("§cPermission requise: autoregen.admin");
+                    return true;
+                }
+                reloadConfig();
+                loadConfiguration();
+                sender.sendMessage("§aConfiguration rechargée !");
+                break;
+                
+            default:
+                sender.sendMessage("§cCommande inconnue. Utilisez /autoregen pour l'aide");
+                break;
+        }
+        
+        return true;
     }
 }
