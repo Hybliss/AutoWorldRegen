@@ -7,6 +7,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -34,24 +35,32 @@ public class AutoWorldRegen extends JavaPlugin {
     private File snapshotFile;
     private Map<String, BlockSnapshot> worldSnapshot;
     
-    // Classe pour stocker l'état d'un bloc
+    // Classe pour stocker l'état d'un bloc (VERSION CORRIGÉE)
     private static class BlockSnapshot implements Serializable {
         private static final long serialVersionUID = 1L;
         
         int x, y, z;
-        Material type;
-        byte data;
+        String materialName;
+        String blockDataString;
         
-        public BlockSnapshot(int x, int y, int z, Material type, byte data) {
+        public BlockSnapshot(int x, int y, int z, Material type, String blockDataString) {
             this.x = x;
             this.y = y;
             this.z = z;
-            this.type = type;
-            this.data = data;
+            this.materialName = type.name();
+            this.blockDataString = blockDataString;
         }
         
         public String getKey() {
             return x + "," + y + "," + z;
+        }
+        
+        public Material getMaterial() {
+            try {
+                return Material.valueOf(materialName);
+            } catch (IllegalArgumentException e) {
+                return Material.AIR;
+            }
         }
     }
     
@@ -104,7 +113,7 @@ public class AutoWorldRegen extends JavaPlugin {
         }
     }
     
-    // Crée un snapshot du monde actuel
+    // Crée un snapshot du monde actuel (VERSION CORRIGÉE)
     private void createSnapshot() {
         String worldName = config.getString("world-name", "world");
         World world = Bukkit.getWorld(worldName);
@@ -125,7 +134,7 @@ public class AutoWorldRegen extends JavaPlugin {
                     for (int y = world.getMinHeight(); y < world.getMaxHeight(); y++) {
                         Block block = chunk.getBlock(x, y, z);
                         
-                        // Ignore l'air et certains blocs
+                        // Ignore l'air
                         if (block.getType() == Material.AIR || 
                             block.getType() == Material.CAVE_AIR ||
                             block.getType() == Material.VOID_AIR) {
@@ -135,10 +144,13 @@ public class AutoWorldRegen extends JavaPlugin {
                         int worldX = chunk.getX() * 16 + x;
                         int worldZ = chunk.getZ() * 16 + z;
                         
+                        // NOUVEAU: Utilise BlockData au lieu de byte data
+                        BlockData blockData = block.getBlockData();
+                        
                         BlockSnapshot snapshot = new BlockSnapshot(
                             worldX, y, worldZ,
                             block.getType(),
-                            block.getData()
+                            blockData.getAsString()
                         );
                         
                         worldSnapshot.put(snapshot.getKey(), snapshot);
@@ -215,6 +227,7 @@ public class AutoWorldRegen extends JavaPlugin {
         logger.info("Regeneration warning sent: " + minutes + " minutes");
     }
     
+    // Régénère les blocs (VERSION CORRIGÉE)
     private void regenerateBlocks() {
         String worldName = config.getString("world-name", "world");
         World world = Bukkit.getWorld(worldName);
@@ -245,13 +258,17 @@ public class AutoWorldRegen extends JavaPlugin {
             // Compare avec le bloc actuel
             Block currentBlock = world.getBlockAt(snapshot.x, snapshot.y, snapshot.z);
             
-            if (currentBlock.getType() != snapshot.type) {
-                // RESTAURE le bloc
-                currentBlock.setType(snapshot.type);
-                if (snapshot.data != 0) {
-                    currentBlock.setData(snapshot.data);
+            if (currentBlock.getType() != snapshot.getMaterial()) {
+                // RESTAURE le bloc (MÉTHODE CORRIGÉE)
+                try {
+                    BlockData blockData = Bukkit.createBlockData(snapshot.blockDataString);
+                    currentBlock.setBlockData(blockData);
+                    restored++;
+                } catch (Exception e) {
+                    // Fallback: juste le type
+                    currentBlock.setType(snapshot.getMaterial());
+                    restored++;
                 }
-                restored++;
             }
             
             // Log progress
