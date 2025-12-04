@@ -1,0 +1,18 @@
+name: AutoWorldRegen
+version: 1.0.0
+main: com.autoregen.AutoWorldRegen
+api-version: 1.21
+author: VotreNom
+description: Régénération automatique des chunks non-claimés
+depend: [GriefPrevention]
+
+commands:
+  autoregen:
+    description: Commandes de gestion du plugin
+    usage: /autoregen [reload|now|info]
+    permission: autoregen.admin
+    
+permissions:
+  autoregen.admin:
+    description: Accès aux commandes admin
+    default: op
