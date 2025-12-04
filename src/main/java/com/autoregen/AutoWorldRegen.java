@@ -9,11 +9,13 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+
 import java.util.Set;
 import java.util.HashSet;
 import java.util.logging.Logger;
 
 public class AutoWorldRegen extends JavaPlugin {
+
     private Logger logger;
     private FileConfiguration config;
     private long regenIntervalTicks;
@@ -28,7 +30,7 @@ public class AutoWorldRegen extends JavaPlugin {
         saveDefaultConfig();
         loadConfiguration();
         startRegenTask();
-        logger.info("AutoWorldRegen active");
+        logger.info("AutoWorldRegen enabled!");
     }
 
     @Override
@@ -36,7 +38,7 @@ public class AutoWorldRegen extends JavaPlugin {
         if (regenTask != null) {
             regenTask.cancel();
         }
-        logger.info("AutoWorldRegen desactive");
+        logger.info("AutoWorldRegen disabled!");
     }
 
     private void loadConfiguration() {
@@ -53,8 +55,11 @@ public class AutoWorldRegen extends JavaPlugin {
             @Override
             public void run() {
                 scheduleWarning();
-                Bukkit.getScheduler().runTaskLater(AutoWorldRegen.this, () -> {
-                    regenerateChunks();
+                Bukkit.getScheduler().runTaskLater(AutoWorldRegen.this, new Runnable() {
+                    @Override
+                    public void run() {
+                        regenerateChunks();
+                    }
                 }, warningMinutes * 60L * 20L);
             }
         };
@@ -62,11 +67,12 @@ public class AutoWorldRegen extends JavaPlugin {
     }
 
     private void scheduleWarning() {
-        String message = config.getString("warning-message", "Regeneration dans " + warningMinutes + " minutes");
+        String message = config.getString("warning-message", "Regeneration in " + warningMinutes + " minutes!");
+        message = message.replace("&", "§").replace("{minutes}", String.valueOf(warningMinutes));
         for (Player player : Bukkit.getOnlinePlayers()) {
-            player.sendMessage(message.replace("&", "§"));
+            player.sendMessage(message);
         }
-        logger.info("Avertissement envoye");
+        logger.info("Warning sent to players");
     }
 
     private void regenerateChunks() {
@@ -84,10 +90,11 @@ public class AutoWorldRegen extends JavaPlugin {
                 chunksRegenerated++;
             }
         }
-        logger.info("Regeneration terminee: " + chunksRegenerated + " chunks");
-        String completeMessage = config.getString("complete-message", "Regeneration terminee");
+        logger.info("Regenerated " + chunksRegenerated + " chunks");
+        String completeMessage = config.getString("complete-message", "Regeneration complete!");
+        completeMessage = completeMessage.replace("&", "§");
         for (Player player : Bukkit.getOnlinePlayers()) {
-            player.sendMessage(completeMessage.replace("&", "§"));
+            player.sendMessage(completeMessage);
         }
     }
 
@@ -113,39 +120,49 @@ public class AutoWorldRegen extends JavaPlugin {
         if (!command.getName().equalsIgnoreCase("autoregen")) {
             return false;
         }
+        
         if (!sender.hasPermission("autoregen.use")) {
-            sender.sendMessage("Permission refusee");
+            sender.sendMessage("§cYou don't have permission!");
             return true;
         }
+        
         if (args.length == 0) {
-            sender.sendMessage("Utilisez: /autoregen info | now | reload");
+            sender.sendMessage("§eUsage: /autoregen <info|now|reload>");
             return true;
         }
-        switch (args[0].toLowerCase()) {
-            case "info":
-                sender.sendMessage("Intervalle: " + (regenIntervalTicks / 20 / 60) + " min");
-                break;
-            case "now":
-                if (!sender.hasPermission("autoregen.admin")) {
-                    sender.sendMessage("Permission requise: autoregen.admin");
-                    return true;
-                }
-                sender.sendMessage("Regeneration forcee");
-                regenerateChunks();
-                break;
-            case "reload":
-                if (!sender.hasPermission("autoregen.admin")) {
-                    sender.sendMessage("Permission requise: autoregen.admin");
-                    return true;
-                }
-                reloadConfig();
-                loadConfiguration();
-                sender.sendMessage("Configuration rechargee");
-                break;
-            default:
-                sender.sendMessage("Commande inconnue");
-                break;
+        
+        String subCommand = args[0].toLowerCase();
+        
+        if (subCommand.equals("info")) {
+            long intervalMinutes = regenIntervalTicks / 20 / 60;
+            sender.sendMessage("§aRegen interval: §f" + intervalMinutes + " minutes");
+            sender.sendMessage("§aWarning time: §f" + warningMinutes + " minutes");
+            sender.sendMessage("§aBuffer radius: §f" + bufferRadius + " chunks");
+            return true;
         }
+        
+        if (subCommand.equals("now")) {
+            if (!sender.hasPermission("autoregen.admin")) {
+                sender.sendMessage("§cYou need autoregen.admin permission!");
+                return true;
+            }
+            sender.sendMessage("§eForcing regeneration...");
+            regenerateChunks();
+            return true;
+        }
+        
+        if (subCommand.equals("reload")) {
+            if (!sender.hasPermission("autoregen.admin")) {
+                sender.sendMessage("§cYou need autoregen.admin permission!");
+                return true;
+            }
+            reloadConfig();
+            loadConfiguration();
+            sender.sendMessage("§aConfiguration reloaded!");
+            return true;
+        }
+        
+        sender.sendMessage("§cUnknown subcommand!");
         return true;
     }
 }
