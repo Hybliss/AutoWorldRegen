@@ -1,15 +1,23 @@
-# Intervalle de régénération en jours
-interval-days: 7
+# AutoWorldRegen Configuration
+# Compatible avec Paper 1.21.10
 
-# Nom du monde à régénérer
-world: world
+# Intervalle entre chaque régénération (en minutes)
+regen-interval-minutes: 120
 
-# Nombre de chunks de sécurité autour des claims
-buffer-chunks: 2
+# Temps d'avertissement avant régénération (en minutes)
+warning-minutes: 10
 
-# Avertissements avant régénération (en minutes)
-warnings:
-  - 30
-  - 10
-  - 5
-  - 1
+# Rayon de protection autour des joueurs (en chunks)
+# 1 chunk = 16 blocs, donc 10 chunks = 160 blocs
+buffer-radius: 10
+
+# Mondes à NE PAS régénérer (liste)
+protected-worlds:
+  - world_nether
+  - world_the_end
+
+# Message d'avertissement ({minutes} sera remplacé)
+warning-message: "&e⚠ Le monde va se régénérer dans {minutes} minutes ! Retournez à vos claims !"
+
+# Message de complétion
+complete-message: "&a✅ Régénération terminée ! Le monde est de nouveau neuf !"
