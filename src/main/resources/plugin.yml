@@ -1,18 +1,18 @@
 name: AutoWorldRegen
-version: 1.0.0
+version: 1.0
 main: com.autoregen.AutoWorldRegen
 api-version: 1.21
-author: VotreNom
-description: Régénération automatique des chunks non-claimés
-depend: [GriefPrevention]
+author: Hyluna
+description: Auto-regenerates world chunks while protecting claims and active players
+softdepend: [GriefPrevention]
 
 commands:
   autoregen:
-    description: Commandes de gestion du plugin
-    usage: /autoregen [reload|now|info]
+    description: Main plugin command
+    usage: /autoregen [now|reload|status]
     permission: autoregen.admin
-    
+
 permissions:
   autoregen.admin:
-    description: Accès aux commandes admin
+    description: Allow access to autoregen commands
     default: op
